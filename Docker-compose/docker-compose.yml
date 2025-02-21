@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  node:
+    image: 159.65.149.125:5000/arka:latest
+    container_name: node
+    restart: unless-stopped
+    environment:
+      - CHAIN_ID=arka-devnet-1
+      - MONIKER=node1
+      - MINIMUM_GAS_PRICE=0uarka
+      - KEY_NAME=validator
+    ports:
+      - "26657:26657" # RPC
+      - "26656:26656" # P2P
+      - "1317:1317"   # REST API
+      - "9090:9090"
+    volumes:
+      - ./entrypoint.sh:/entrypoint.sh:ro
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:26657/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+    networks:
+      - app-network
+
+    command: ["sh", "/entrypoint.sh"]
+
+  ipfs-node:
+    image: ipfs/kubo:latest
+    container_name: ipfs-node
+    restart: no
+    ports:
+      - "4001:4001" # IPFS Swarm Port
+      - "5001:5001" # IPFS API Port
+      - "8081:8080" # IPFS Gateway Port
+    volumes:
+      - ./ipfs.sh:/ipfs.sh:ro   
+      - ./ipfs_data:/data/ipfs   
+
+    networks:
+      - app-network
+    entrypoint: ["/bin/sh", "/ipfs.sh"] 
+
+ 
+  agent-dashboard:
+    image: 159.65.149.125:5000/app:latest
+    container_name: agent-dashboard
+    working_dir: /arka-app
+    env_file:
+      - .env_dashboard
+    volumes:
+      - ./.env_dashboard:/arka-app/agent-dashboard/.env
+      - ./dashboard.sh:/arka-app/agent-dashboard/dashboard.sh
+    restart: no
+    ports:
+      - "3000:3000"   
+    entrypoint: ["/bin/sh", "/arka-app/agent-dashboard/dashboard.sh"]
+
+
+  playground:
+    image: 159.65.149.125:5000/app:latest
+    container_name: playground
+    working_dir: /arka-app
+    env_file:
+      - .env_playground
+    volumes:
+      - ./.env_playground:/arka-app/playground/.env
+      - ./playground.sh:/arka-app/playground/playground.sh
+    restart: no
+    ports:
+      - "3001:3000"   
+    entrypoint: ["/bin/sh", "/arka-app/playground/playground.sh"]
+
+networks:
+  app-network:
+    name: app-network
+    driver: bridge

@@ -1,0 +1,45 @@
+FROM debian:buster AS build-env
+
+# Install dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    curl \
+    make \
+    git \
+    gcc \
+    libc6-dev \
+    python3 \
+    wget \
+    linux-headers-amd64 \
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set Go version and download it
+ENV GO_VERSION=1.23.0
+RUN curl -Lo go.tar.gz https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go.tar.gz && \
+    rm go.tar.gz
+
+# Set Go environment variables
+ENV PATH="/usr/local/go/bin:$PATH"
+
+# Set up the working directory
+WORKDIR /go/src/github.com/arka-labs/arka-network
+
+# Copy Go module files and download dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the source code
+COPY . .
+
+# Download wasmvm dependency
+RUN WASMVM_VERSION=$(go list -m github.com/CosmWasm/wasmvm | sed 's/.* //') && \
+    wget https://github.com/CosmWasm/wasmvm/releases/download/$WASMVM_VERSION/libwasmvm_muslc.x86_64.a \
+    -O /lib/libwasmvm_muslc.a
+
+# Build the binary
+RUN make build
+
+# Set the default command
+CMD ["arkad"]
