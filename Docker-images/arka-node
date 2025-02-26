@@ -1,6 +1,5 @@
 FROM debian:buster AS build-env
 
-# Install dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     curl \
@@ -11,35 +10,49 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     wget \
     linux-headers-amd64 \
-    ca-certificates && \
+    ca-certificates \
+    jq \
+    build-essential \
+    musl-dev \
+    clang \
+    llvm \
+    pkg-config && \
     rm -rf /var/lib/apt/lists/*
 
-# Set Go version and download it
 ENV GO_VERSION=1.23.0
 RUN curl -Lo go.tar.gz https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz && \
     tar -C /usr/local -xzf go.tar.gz && \
     rm go.tar.gz
 
-# Set Go environment variables
 ENV PATH="/usr/local/go/bin:$PATH"
 
-# Set up the working directory
 WORKDIR /go/src/github.com/arka-labs/arka-network
 
-# Copy Go module files and download dependencies
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the source code
 COPY . .
 
-# Download wasmvm dependency
-RUN WASMVM_VERSION=$(go list -m github.com/CosmWasm/wasmvm | sed 's/.* //') && \
-    wget https://github.com/CosmWasm/wasmvm/releases/download/$WASMVM_VERSION/libwasmvm_muslc.x86_64.a \
-    -O /lib/libwasmvm_muslc.a
+ARG WASMVM_VERSION=v2.1.4
+ADD https://github.com/CosmWasm/wasmvm/releases/download/${WASMVM_VERSION}/libwasmvm_muslc.aarch64.a /lib/libwasmvm_muslc.aarch64.a
+ADD https://github.com/CosmWasm/wasmvm/releases/download/${WASMVM_VERSION}/libwasmvm_muslc.x86_64.a /lib/libwasmvm_muslc.x86_64.a
+ADD https://github.com/CosmWasm/wasmvm/releases/download/${WASMVM_VERSION}/libwasmvm.x86_64.so /usr/lib/libwasmvm.x86_64.so
+RUN chmod +x /usr/lib/libwasmvm.x86_64.so && ldconfig
+RUN cp "/lib/libwasmvm_muslc.$(uname -m).a" /lib/libwasmvm_muslc.a
 
-# Build the binary
-RUN make build
+RUN CGO_ENABLED=1 make build
 
-# Set the default command
-CMD ["arkad"]
+FROM debian:buster-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /go/src/github.com/arka-labs/arka-network
+
+COPY --from=build-env /go/src/github.com/arka-labs/arka-network/build/arkad /go/src/github.com/arka-labs/arka-network/build/arkad
+COPY --from=build-env /lib/libwasmvm_muslc.a /lib/libwasmvm_muslc.a
+COPY --from=build-env /usr/lib/libwasmvm.x86_64.so /usr/lib/libwasmvm.x86_64.so
+
+ENV LD_LIBRARY_PATH="/lib:/usr/lib"
+
+ENTRYPOINT ["arkad"]

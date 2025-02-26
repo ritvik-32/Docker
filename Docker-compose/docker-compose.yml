@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   node:
-    image: 159.65.149.125:5000/arka:latest
+    image: 159.65.149.125:5000/node:latest
     container_name: node
     restart: unless-stopped
     environment:
@@ -21,7 +21,7 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:26657/status"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 5
 
     networks:
